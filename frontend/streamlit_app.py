@@ -27,8 +27,50 @@ for key, default in [
     if key not in st.session_state:
         st.session_state[key] = default
 
-# If we just came back from Google OAuth, Supabase appends `?code=<authcode>`
-# to the redirect URL. Exchange it for a session before rendering anything.
+# ── Implicit-flow: Supabase returns tokens in the URL hash (#access_token=...)
+# JavaScript reads the hash (Python can't) and rewrites it as query params
+# so Streamlit can pick them up on the next rerun.
+if not st.session_state.access_token:
+    st.components.v1.html("""
+    <script>
+    const hash = window.location.hash;
+    if (hash && hash.includes('access_token')) {
+        const params = new URLSearchParams(hash.substring(1));
+        const access_token  = params.get('access_token');
+        const refresh_token = params.get('refresh_token') || '';
+        if (access_token) {
+            // Replace the hash with query params so Streamlit can read them
+            const newUrl = window.location.pathname +
+                '?access_token=' + encodeURIComponent(access_token) +
+                '&refresh_token=' + encodeURIComponent(refresh_token);
+            window.location.replace(newUrl);
+        }
+    }
+    </script>
+    """, height=0)
+
+# ── Handle implicit-flow tokens passed back as query params by the JS above
+if (
+    not st.session_state.access_token
+    and "access_token" in st.query_params
+):
+    import json, base64
+    token   = st.query_params["access_token"]
+    refresh = st.query_params.get("refresh_token", "")
+    try:
+        # Decode JWT payload (no signature verification needed here)
+        padding = 4 - len(token.split(".")[1]) % 4
+        payload = json.loads(base64.urlsafe_b64decode(token.split(".")[1] + "=" * padding))
+        st.session_state.access_token  = token
+        st.session_state.refresh_token = refresh
+        st.session_state.user_id       = payload.get("sub")
+        st.session_state.user_email    = payload.get("email")
+    except Exception as exc:
+        st.session_state.auth_error = f"Google sign-in failed: could not parse token ({exc})"
+    st.query_params.clear()
+    st.rerun()
+
+# ── PKCE flow: Supabase appends ?code=<authcode> to the redirect URL.
 if (
     not st.session_state.access_token
     and "code" in st.query_params
@@ -36,7 +78,7 @@ if (
     from frontend.services import supabase_client
     result = supabase_client.exchange_code_for_session(st.query_params["code"])
 
-    #Always clear the ?code= param so a refresh doesn't try to re-exchange.
+    # Always clear the ?code= param so a refresh doesn't try to re-exchange.
     st.query_params.clear()
     if "error" in result:
         st.session_state.auth_error = f"Google sign-in failed: {result['error']}"
