@@ -47,10 +47,14 @@ def _missing_config() -> str | None:
 
 @st.cache_resource
 def get_client() -> Client | None:
-    """Cached singleton — preserves PKCE state across Streamlit reruns."""
     if _missing_config():
         return None
-    return create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+    from supabase import ClientOptions
+    return create_client(
+        SUPABASE_URL,
+        SUPABASE_ANON_KEY,
+        options=ClientOptions(flow_type="implicit")
+    )
 
 
 def _session_dict(session, user) -> Dict[str, Any]:
