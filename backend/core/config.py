@@ -18,9 +18,7 @@ APP_VERSION='1.0.0'
 APP_DESCRIPTION='analyse resumes against job description using nlp + ml'
 
 ALLOWED_ORIGINS = [
-    'https://localhost:5173',
-    'https://localhost:3000',
-    'https://127.0.0.1:5173',
+    'https://atsscorebyai-jdsywtq5xcdmsx9su9g6ow.streamlit.app/'
 ]  
 
 #file 
